@@ -1,1229 +1,322 @@
-# # import os
-# # import cv2
-# # import numpy as np
-# # import pandas as pd
-# # import mediapipe as mp
-# # from sklearn.ensemble import RandomForestClassifier
-# # from sklearn.model_selection import train_test_split
-# # from sklearn.metrics import accuracy_score
-# # import joblib
-# # import tkinter as tk
-# # from tkinter import ttk, messagebox, filedialog
-# # from PIL import Image, ImageTk
-# # import pyttsx3
-# # from collections import deque, Counter
-
-# # DATA_PATH = "sign_data.csv"
-# # MODEL_PATH = "sign_model.pkl"
-
-# # mp_hands = mp.solutions.hands
-# # mp_drawing = mp.solutions.drawing_utils
-
-# # # Light UI Colors
-# # BG_COLOR = "#ffffff"        # window background
-# # BTN_COLOR = "#3b82f6"       # button blue
-# # TEXT_COLOR = "#000000"      # black text
-# # ACCENT_COLOR = "#16a34a"    # green accent
-
-# # def normalize_landmarks(landmarks):
-# #     pts = np.array([(lm.x, lm.y) for lm in landmarks], dtype=np.float32)
-# #     origin = pts[0]
-# #     pts -= origin
-# #     scale = np.max(np.linalg.norm(pts, axis=1)) + 1e-6
-# #     pts /= scale
-# #     return pts.flatten()
-
-# # class SignTranslatorFromCSV:
-# #     def __init__(self, root):
-# #         self.root = root
-# #         self.root.title("🖐 Sign Language Translator")
-# #         self.root.geometry("1050x800")
-# #         self.root.configure(bg=BG_COLOR)
-
-# #         style = ttk.Style()
-# #         style.theme_use("clam")
-# #         style.configure("TButton", padding=10, relief="flat", background=BTN_COLOR, foreground=TEXT_COLOR)
-# #         style.configure("Big.TButton",
-# #                         padding=15,
-# #                         relief="flat",
-# #                         background=BTN_COLOR,
-# #                         foreground=TEXT_COLOR,
-# #                         font=("Segoe UI", 12, "bold"))
-# #         style.map("Big.TButton", background=[("active", "#2563eb")])
-
-# #         self.video_label = tk.Label(self.root, bg="black")
-# #         self.video_label.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
-
-# #         controls = ttk.Frame(self.root)
-# #         controls.pack(fill=tk.X, pady=10)
-
-# #         self.start_btn = ttk.Button(controls, text="▶ Start", command=self.start, style="Big.TButton")
-# #         self.stop_btn = ttk.Button(controls, text="⏹ Stop", command=self.stop, style="Big.TButton")
-# #         self.speak_btn = ttk.Button(controls, text="🔊 Speak", command=self.speak, style="Big.TButton")
-# #         self.reset_btn = ttk.Button(controls, text="♻ Reset Transcript", command=self.reset_transcript, style="Big.TButton")
-# #         self.save_btn = ttk.Button(controls, text="💾 Save Transcript", command=self.save_transcript, style="Big.TButton")
-
-# #         for btn in [self.start_btn, self.stop_btn, self.speak_btn, self.reset_btn, self.save_btn]:
-# #             btn.pack(side=tk.LEFT, padx=3, pady=3, fill=tk.X, expand=True)
-
-# #         status_frame = ttk.Frame(self.root)
-# #         status_frame.pack(fill=tk.X, pady=5)
-# #         ttk.Label(status_frame, text="Prediction:", font=("Segoe UI", 14, "bold"),
-# #                   foreground=TEXT_COLOR, background=BG_COLOR).pack(side=tk.LEFT, padx=5)
-# #         self.pred_var = tk.StringVar(value="—")
-# #         self.pred_label = ttk.Label(status_frame, textvariable=self.pred_var,
-# #                                     font=("Segoe UI", 18, "bold"), foreground=ACCENT_COLOR, background=BG_COLOR)
-# #         self.pred_label.pack(side=tk.LEFT, padx=10)
-# #         self.conf_var = tk.StringVar(value="")
-# #         ttk.Label(status_frame, textvariable=self.conf_var, font=("Segoe UI", 12),
-# #                   foreground="#4b5563", background=BG_COLOR).pack(side=tk.LEFT)
-
-# #         transcript_frame = ttk.LabelFrame(self.root, text="Transcript")
-# #         transcript_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-# #         self.transcript = tk.Text(transcript_frame, height=8, font=("Segoe UI", 12),
-# #                                   bg="#f3f4f6", fg=TEXT_COLOR, insertbackground="black")
-# #         self.transcript.pack(fill=tk.BOTH, expand=True)
-
-# #         self.cap = None
-# #         self.running = False
-# #         self.hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1,
-# #                                      min_detection_confidence=0.5, min_tracking_confidence=0.5)
-# #         self.engine = pyttsx3.init()
-# #         self.engine.setProperty("rate", 170)
-
-# #         self.clf = None
-# #         self.labels_ = None
-# #         self.window = deque(maxlen=12)
-# #         self.last_prediction = None
-
-# #         self.prepare_and_train()
-
-# #     def prepare_and_train(self):
-# #         if not os.path.exists(DATA_PATH):
-# #             messagebox.showerror("Dataset Missing", f"{DATA_PATH} not found.")
-# #             return
-# #         df = pd.read_csv(DATA_PATH, header=None)
-# #         if df.empty:
-# #             messagebox.showerror("Dataset Empty", f"{DATA_PATH} is empty.")
-# #             return
-# #         X = df.iloc[:, :-1].values
-# #         y = df.iloc[:, -1].values
-# #         try:
-# #             Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-# #         except Exception:
-# #             Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42)
-# #         self.clf = RandomForestClassifier(n_estimators=300, random_state=42)
-# #         self.clf.fit(Xtr, ytr)
-# #         if len(np.unique(yte)) > 1 and len(yte) > 0:
-# #             yhat = self.clf.predict(Xte)
-# #             acc = accuracy_score(yte, yhat)
-# #             self.conf_var.set(f"Model Accuracy: {acc:.2f}")
-# #         self.labels_ = np.unique(y)
-# #         joblib.dump(self.clf, MODEL_PATH)
-
-# #     def start(self):
-# #         if self.running:
-# #             return
-# #         if self.clf is None:
-# #             messagebox.showerror("No Model", "Train the model first.")
-# #             return
-# #         self.cap = cv2.VideoCapture(0)
-# #         if not self.cap.isOpened():
-# #             messagebox.showerror("Camera Error", "Could not open webcam.")
-# #             return
-# #         self.running = True
-# #         self.update()
-
-# #     def stop(self):
-# #         self.running = False
-# #         if self.cap:
-# #             self.cap.release()
-# #         self.video_label.config(image='')
-# #         self.window.clear()
-
-# #     def reset_transcript(self):
-# #         self.transcript.delete("1.0", tk.END)
-# #         self.last_prediction = None
-
-# #     def update(self):
-# #         if not self.running:
-# #             return
-# #         ok, frame = self.cap.read()
-# #         if not ok:
-# #             self.stop()
-# #             return
-# #         frame = cv2.flip(frame, 1)
-# #         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-# #         res = self.hands.process(rgb)
-# #         pred = None
-# #         pred_conf = 0.0
-# #         if res.multi_hand_landmarks:
-# #             hand = res.multi_hand_landmarks[0]
-# #             mp_drawing.draw_landmarks(frame, hand, mp_hands.HAND_CONNECTIONS)
-# #             feat = normalize_landmarks(hand.landmark)
-# #             if hasattr(self.clf, "predict_proba"):
-# #                 proba = self.clf.predict_proba([feat])[0]
-# #                 pred_idx = int(np.argmax(proba))
-# #                 pred = self.clf.classes_[pred_idx]
-# #                 pred_conf = float(proba[pred_idx])
-# #             else:
-# #                 pred = self.clf.predict([feat])[0]
-# #                 pred_conf = 1.0
-# #             self.window.append(pred)
-# #             if len(self.window) == self.window.maxlen:
-# #                 common, count = Counter(self.window).most_common(1)[0]
-# #                 pred = common
-# #                 pred_conf = count / len(self.window)
-# #         if pred is not None:
-# #             self.pred_var.set(str(pred))
-# #             if pred_conf >= 0.7 and pred != self.last_prediction:
-# #                 self.transcript.insert(tk.END, pred + ' ')
-# #                 self.transcript.see(tk.END)
-# #                 self.last_prediction = pred
-# #         else:
-# #             self.pred_var.set("—")
-# #             self.last_prediction = None
-# #         img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-# #         imgtk = ImageTk.PhotoImage(image=img)
-# #         self.video_label.imgtk = imgtk
-# #         self.video_label.configure(image=imgtk)
-# #         self.root.after(15, self.update)
-
-# #     def save_transcript(self):
-# #         txt = self.transcript.get("1.0", tk.END).strip()
-# #         if not txt:
-# #             return
-# #         path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text Files", "*.txt")])
-# #         if path:
-# #             with open(path, "w", encoding="utf-8") as f:
-# #                 f.write(txt)
-# #             messagebox.showinfo("Saved", f"Transcript saved to:\n{path}")
-
-# #     def speak(self):
-# #         txt = self.transcript.get("1.0", tk.END).strip()
-# #         if not txt:
-# #             return
-# #         self.engine.say(txt)
-# #         self.engine.runAndWait()
-
-# #     def on_closing(self):
-# #         if messagebox.askokcancel("Exit", "Are you sure you want to exit?"):
-# #             self.stop()
-# #             self.root.destroy()
-
-# # if __name__ == "__main__":
-# #     root = tk.Tk()
-# #     app = SignTranslatorFromCSV(root)
-# #     root.protocol("WM_DELETE_WINDOW", app.on_closing)
-# #     root.mainloop()
-
-
-# import os
-# import cv2
-# import numpy as np
-# import pandas as pd
-# import mediapipe as mp
-# from sklearn.ensemble import RandomForestClassifier
-# from sklearn.model_selection import train_test_split
-# from sklearn.metrics import accuracy_score
-# import joblib
-# import tkinter as tk
-# from tkinter import ttk, messagebox, filedialog
-# from PIL import Image, ImageTk
-# import pyttsx3
-# from collections import deque, Counter
-
-# # Paths
-# DATA_PATH = "sign_data.csv"
-# MODEL_PATH = "sign_model.pkl"
-# VIDEO_FOLDER = "video"
-
-# # Ensure video folder exists
-# if not os.path.exists(VIDEO_FOLDER):
-#     os.makedirs(VIDEO_FOLDER)
-
-# # Mediapipe
-# mp_hands = mp.solutions.hands
-# mp_drawing = mp.solutions.drawing_utils
-
-# # UI Colors
-# BG_COLOR = "#ffffff"
-# BTN_COLOR = "#3b82f6"
-# TEXT_COLOR = "#000000"
-# ACCENT_COLOR = "#16a34a"
-
-
-# def normalize_landmarks(landmarks):
-#     pts = np.array([(lm.x, lm.y) for lm in landmarks], dtype=np.float32)
-#     origin = pts[0]
-#     pts -= origin
-#     scale = np.max(np.linalg.norm(pts, axis=1)) + 1e-6
-#     pts /= scale
-#     return pts.flatten()
-
-
-# class SignTranslatorApp:
-#     def __init__(self, root):
-#         self.root = root
-#         self.root.title("🖐 Sign Language Translator")
-#         self.root.geometry("1050x800")
-#         self.root.configure(bg=BG_COLOR)
-
-#         # common vars
-#         self.cap = None
-#         self.running = False
-#         self.hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1,
-#                                     min_detection_confidence=0.5, min_tracking_confidence=0.5)
-#         self.engine = pyttsx3.init()
-#         self.engine.setProperty("rate", 170)
-#         self.clf = None
-#         self.labels_ = None
-#         self.window = deque(maxlen=12)
-#         self.last_prediction = None
-#         self.video_cap = None
-
-#         self.show_main_menu()
-
-#     # ---------------- Main Menu ----------------
-#     def show_main_menu(self):
-#         self.clear_root()
-
-#         frame = ttk.Frame(self.root)
-#         frame.pack(expand=True)
-
-#         ttk.Label(frame, text="🖐 Sign Language Translator", font=("Segoe UI", 20, "bold")).pack(pady=20)
-
-#         ttk.Button(frame, text="Translate Mode", command=self.init_translate_ui,
-#                    style="TButton").pack(pady=10, ipadx=20, ipady=10)
-#         ttk.Button(frame, text="Learning Mode", command=self.init_learning_ui,
-#                    style="TButton").pack(pady=10, ipadx=20, ipady=10)
-#         ttk.Button(frame, text="Exit", command=self.root.quit,
-#                    style="TButton").pack(pady=10, ipadx=20, ipady=10)
-
-#     def clear_root(self):
-#         for widget in self.root.winfo_children():
-#             widget.destroy()
-
-#     # ---------------- Translate Mode ----------------
-#     def init_translate_ui(self):
-#         self.clear_root()
-
-#         self.video_label = tk.Label(self.root, bg="black")
-#         self.video_label.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
-
-#         controls = ttk.Frame(self.root)
-#         controls.pack(fill=tk.X, pady=10)
-
-#         self.start_btn = ttk.Button(controls, text="▶ Start", command=self.start)
-#         self.stop_btn = ttk.Button(controls, text="⏹ Stop", command=self.stop)
-#         self.speak_btn = ttk.Button(controls, text="🔊 Speak", command=self.speak)
-#         self.reset_btn = ttk.Button(controls, text="♻ Reset Transcript", command=self.reset_transcript)
-#         self.save_btn = ttk.Button(controls, text="💾 Save Transcript", command=self.save_transcript)
-#         self.back_btn = ttk.Button(controls, text="⬅ Back", command=self.show_main_menu)
-
-#         for btn in [self.start_btn, self.stop_btn, self.speak_btn,
-#                     self.reset_btn, self.save_btn, self.back_btn]:
-#             btn.pack(side=tk.LEFT, padx=3, pady=3, fill=tk.X, expand=True)
-
-#         status_frame = ttk.Frame(self.root)
-#         status_frame.pack(fill=tk.X, pady=5)
-#         ttk.Label(status_frame, text="Prediction:", font=("Segoe UI", 14, "bold")).pack(side=tk.LEFT, padx=5)
-#         self.pred_var = tk.StringVar(value="—")
-#         self.pred_label = ttk.Label(status_frame, textvariable=self.pred_var,
-#                                     font=("Segoe UI", 18, "bold"), foreground=ACCENT_COLOR)
-#         self.pred_label.pack(side=tk.LEFT, padx=10)
-#         self.conf_var = tk.StringVar(value="")
-#         ttk.Label(status_frame, textvariable=self.conf_var, font=("Segoe UI", 12),
-#                   foreground="#4b5563").pack(side=tk.LEFT)
-
-#         transcript_frame = ttk.LabelFrame(self.root, text="Transcript")
-#         transcript_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-#         self.transcript = tk.Text(transcript_frame, height=8, font=("Segoe UI", 12),
-#                                   bg="#f3f4f6", fg=TEXT_COLOR, insertbackground="black")
-#         self.transcript.pack(fill=tk.BOTH, expand=True)
-
-#         self.prepare_and_train()
-
-#     def prepare_and_train(self):
-#         if not os.path.exists(DATA_PATH):
-#             messagebox.showerror("Dataset Missing", f"{DATA_PATH} not found.")
-#             return
-#         df = pd.read_csv(DATA_PATH, header=None)
-#         if df.empty:
-#             messagebox.showerror("Dataset Empty", f"{DATA_PATH} is empty.")
-#             return
-#         X = df.iloc[:, :-1].values
-#         y = df.iloc[:, -1].values
-#         try:
-#             Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-#         except Exception:
-#             Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42)
-#         self.clf = RandomForestClassifier(n_estimators=300, random_state=42)
-#         self.clf.fit(Xtr, ytr)
-#         if len(np.unique(yte)) > 1 and len(yte) > 0:
-#             yhat = self.clf.predict(Xte)
-#             acc = accuracy_score(yte, yhat)
-#             self.conf_var.set(f"Model Accuracy: {acc:.2f}")
-#         self.labels_ = np.unique(y)
-#         joblib.dump(self.clf, MODEL_PATH)
-
-#     def start(self):
-#         if self.running:
-#             return
-#         if self.clf is None:
-#             messagebox.showerror("No Model", "Train the model first.")
-#             return
-#         self.cap = cv2.VideoCapture(0)
-#         if not self.cap.isOpened():
-#             messagebox.showerror("Camera Error", "Could not open webcam.")
-#             return
-#         self.running = True
-#         self.update_translate()
-
-#     def stop(self):
-#         self.running = False
-#         if self.cap:
-#             self.cap.release()
-#         self.video_label.config(image='')
-#         self.window.clear()
-
-#     def reset_transcript(self):
-#         self.transcript.delete("1.0", tk.END)
-#         self.last_prediction = None
-
-#     def update_translate(self):
-#         if not self.running:
-#             return
-#         ok, frame = self.cap.read()
-#         if not ok:
-#             self.stop()
-#             return
-#         frame = cv2.flip(frame, 1)
-#         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-#         res = self.hands.process(rgb)
-#         pred = None
-#         pred_conf = 0.0
-#         if res.multi_hand_landmarks:
-#             hand = res.multi_hand_landmarks[0]
-#             mp_drawing.draw_landmarks(frame, hand, mp_hands.HAND_CONNECTIONS)
-#             feat = normalize_landmarks(hand.landmark)
-#             if hasattr(self.clf, "predict_proba"):
-#                 proba = self.clf.predict_proba([feat])[0]
-#                 pred_idx = int(np.argmax(proba))
-#                 pred = self.clf.classes_[pred_idx]
-#                 pred_conf = float(proba[pred_idx])
-#             else:
-#                 pred = self.clf.predict([feat])[0]
-#                 pred_conf = 1.0
-#             self.window.append(pred)
-#             if len(self.window) == self.window.maxlen:
-#                 common, count = Counter(self.window).most_common(1)[0]
-#                 pred = common
-#                 pred_conf = count / len(self.window)
-#         if pred is not None:
-#             self.pred_var.set(str(pred))
-#             if pred_conf >= 0.7 and pred != self.last_prediction:
-#                 self.transcript.insert(tk.END, pred + ' ')
-#                 self.transcript.see(tk.END)
-#                 self.last_prediction = pred
-#         else:
-#             self.pred_var.set("—")
-#             self.last_prediction = None
-#         img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-#         imgtk = ImageTk.PhotoImage(image=img)
-#         self.video_label.imgtk = imgtk
-#         self.video_label.configure(image=imgtk)
-#         self.root.after(15, self.update_translate)
-
-#     def save_transcript(self):
-#         txt = self.transcript.get("1.0", tk.END).strip()
-#         if not txt:
-#             return
-#         path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text Files", "*.txt")])
-#         if path:
-#             with open(path, "w", encoding="utf-8") as f:
-#                 f.write(txt)
-#             messagebox.showinfo("Saved", f"Transcript saved to:\n{path}")
-
-#     def speak(self):
-#         txt = self.transcript.get("1.0", tk.END).strip()
-#         if not txt:
-#             return
-#         self.engine.say(txt)
-#         self.engine.runAndWait()
-
-#     # ---------------- Learning Mode ----------------
-#     def init_learning_ui(self):
-#         self.clear_root()
-
-#         ttk.Label(self.root, text="📚 Learning Mode", font=("Segoe UI", 18, "bold")).pack(pady=10)
-
-#         video_files = [f for f in os.listdir(VIDEO_FOLDER) if f.endswith(".mp4")]
-#         if not video_files:
-#             ttk.Label(self.root, text="No videos found in 'video' folder.", font=("Segoe UI", 12)).pack(pady=20)
-#             ttk.Button(self.root, text="⬅ Back", command=self.show_main_menu).pack(pady=10)
-#             return
-
-#         self.video_var = tk.StringVar(value=video_files[0])
-#         ttk.Combobox(self.root, textvariable=self.video_var, values=video_files, state="readonly").pack(pady=10)
-
-#         self.video_label = tk.Label(self.root, bg="black")
-#         self.video_label.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
-
-#         controls = ttk.Frame(self.root)
-#         controls.pack(pady=10)
-
-#         ttk.Button(controls, text="▶ Play", command=self.play_video).pack(side=tk.LEFT, padx=5)
-#         ttk.Button(controls, text="⏹ Stop", command=self.stop_video).pack(side=tk.LEFT, padx=5)
-#         ttk.Button(controls, text="⬅ Back", command=self.back_from_learning).pack(side=tk.LEFT, padx=5)
-
-#     def play_video(self):
-#         video_path = os.path.join(VIDEO_FOLDER, self.video_var.get())
-#         if self.video_cap:
-#             self.video_cap.release()
-#         self.video_cap = cv2.VideoCapture(video_path)
-#         self.update_video()
-
-#     def stop_video(self):
-#         if self.video_cap:
-#             self.video_cap.release()
-#             self.video_cap = None
-#         self.video_label.config(image='')
-
-#     def update_video(self):
-#         if not self.video_cap or not self.video_cap.isOpened():
-#             return
-#         ret, frame = self.video_cap.read()
-#         if not ret:
-#             self.stop_video()
-#             return
-#         frame = cv2.resize(frame, (800, 600))
-#         img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-#         imgtk = ImageTk.PhotoImage(image=img)
-#         self.video_label.imgtk = imgtk
-#         self.video_label.configure(image=imgtk)
-#         self.root.after(30, self.update_video)
-
-#     def back_from_learning(self):
-#         self.stop_video()
-#         self.show_main_menu()
-
-
-# if __name__ == "__main__":
-#     root = tk.Tk()
-#     app = SignTranslatorApp(root)
-#     root.mainloop()
-
-# import os
-# import cv2
-# import numpy as np
-# import pandas as pd
-# import mediapipe as mp
-# from sklearn.ensemble import RandomForestClassifier
-# from sklearn.model_selection import train_test_split
-# from sklearn.metrics import accuracy_score
-# import joblib
-# import tkinter as tk
-# from tkinter import ttk, messagebox, filedialog
-# from PIL import Image, ImageTk
-# import pyttsx3
-# from collections import deque, Counter
-
-
-# # Paths
-# DATA_PATH = "sign_data.csv"
-# MODEL_PATH = "sign_model.pkl"
-# VIDEO_FOLDER = "video"
-
-
-# # Ensure video folder exists
-# if not os.path.exists(VIDEO_FOLDER):
-#     os.makedirs(VIDEO_FOLDER)
-
-
-# # Mediapipe
-# mp_hands = mp.solutions.hands
-# mp_drawing = mp.solutions.drawing_utils
-
-
-# # UI Colors & Fonts
-# BG_COLOR = "#f0f4f8"  # Light pastel background
-# BTN_COLOR = "#2563eb"  # Bright blue
-# BTN_HOVER_COLOR = "#1e4ecc"  # Darker blue on hover
-# TEXT_COLOR = "#202324"  # Dark text
-# ACCENT_COLOR = "#16a34a"  # Green accent
-# FONT_FAMILY = "Segoe UI"
-
-
-# def normalize_landmarks(landmarks):
-#     pts = np.array([(lm.x, lm.y) for lm in landmarks], dtype=np.float32)
-#     origin = pts[0]
-#     pts -= origin
-#     scale = np.max(np.linalg.norm(pts, axis=1)) + 1e-6
-#     pts /= scale
-#     return pts.flatten()
-
-
-# class CustomButton(ttk.Button):
-#     def __init__(self, master=None, **kw):
-#         ttk.Button.__init__(self, master=master, **kw)
-#         self.default_style = kw.get('style', 'TButton')
-#         self.bind("<Enter>", self.on_enter)
-#         self.bind("<Leave>", self.on_leave)
-
-#     def on_enter(self, e):
-#         self.configure(style="Hover.TButton")
-
-#     def on_leave(self, e):
-#         self.configure(style=self.default_style)
-
-
-# class SignTranslatorApp:
-#     def __init__(self, root):
-#         self.root = root
-#         self.root.title("🖐 Sign Language Translator")
-
-#         # Set window icon with logo.png (supports transparent PNG)
-#         logo_img = Image.open("logo.png")
-#         logo_icon = ImageTk.PhotoImage(logo_img)
-#         self.root.iconphoto(True, logo_icon)
-#         self.logo_icon = logo_icon
-
-#         self.root.geometry("1050x800")
-#         self.root.configure(bg=BG_COLOR)
-
-#         # Setup styles
-#         self.style = ttk.Style()
-#         self.style.theme_use("clam")
-
-#         self.style.configure("TButton",
-#                              font=(FONT_FAMILY, 11, "bold"),
-#                              padding=10,
-#                              relief="flat",
-#                              foreground="white",
-#                              background=BTN_COLOR)
-#         self.style.map("TButton",
-#                        background=[('active', BTN_HOVER_COLOR)])
-
-#         self.style.configure("Hover.TButton",
-#                              background=BTN_HOVER_COLOR,
-#                              foreground="white")
-
-#         self.style.configure("Big.TButton",
-#                              font=(FONT_FAMILY, 13, "bold"),
-#                              padding=15,
-#                              relief="flat",
-#                              background=BTN_COLOR,
-#                              foreground="white",
-#                              borderwidth=0)
-#         self.style.map("Big.TButton",
-#                        background=[("active", BTN_HOVER_COLOR)])
-
-#         self.style.configure("TLabel",
-#                              font=(FONT_FAMILY, 12),
-#                              foreground=TEXT_COLOR,
-#                              background=BG_COLOR)
-
-#         self.cap = None
-#         self.running = False
-#         self.hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1,
-#                                     min_detection_confidence=0.5, min_tracking_confidence=0.5)
-#         self.engine = pyttsx3.init()
-#         self.engine.setProperty("rate", 170)
-#         self.clf = None
-#         self.labels_ = None
-#         self.window = deque(maxlen=12)
-#         self.last_prediction = None
-#         self.video_cap = None
-
-#         self.show_main_menu()
-
-#     # ---------------- Main Menu ----------------
-#     def show_main_menu(self):
-#         self.clear_root()
-
-#         frame = ttk.Frame(self.root)
-#         frame.pack(expand=True)
-
-#         frame.configure(style="TFrame")
-
-#         logo_img = Image.open("logo.png")
-#         logo_img = logo_img.resize((140, 140))
-#         self.logo_photo = ImageTk.PhotoImage(logo_img)
-#         logo_label = tk.Label(frame, image=self.logo_photo, bg=BG_COLOR)
-#         logo_label.pack(pady=(20, 10))
-
-#         ttk.Label(frame, text="🖐 Sign Language Translator",
-#                   font=(FONT_FAMILY, 24, "bold"), foreground=ACCENT_COLOR, background=BG_COLOR).pack(pady=20)
-
-#         btn_translate = CustomButton(frame, text="Translate Mode",
-#                                      command=self.init_translate_ui, style="Big.TButton")
-#         btn_translate.pack(pady=10, ipadx=30, ipady=12, fill=tk.X)
-
-#         btn_learning = CustomButton(frame, text="Learning Mode",
-#                                    command=self.init_learning_ui, style="Big.TButton")
-#         btn_learning.pack(pady=10, ipadx=30, ipady=12, fill=tk.X)
-
-#         btn_exit = CustomButton(frame, text="Exit", command=self.root.quit, style="Big.TButton")
-#         btn_exit.pack(pady=10, ipadx=30, ipady=12, fill=tk.X)
-
-#     def clear_root(self):
-#         for widget in self.root.winfo_children():
-#             widget.destroy()
-
-#     # ---------------- Translate Mode ----------------
-#     def init_translate_ui(self):
-#         self.clear_root()
-
-#         self.video_label = tk.Label(self.root, bg="black", bd=4, relief="sunken")
-#         self.video_label.pack(padx=15, pady=15, fill=tk.BOTH, expand=True)
-
-#         controls = ttk.Frame(self.root)
-#         controls.pack(fill=tk.X, pady=10, padx=15)
-
-#         self.start_btn = CustomButton(controls, text="▶ Start", command=self.start, style="Big.TButton")
-#         self.stop_btn = CustomButton(controls, text="⏹ Stop", command=self.stop, style="Big.TButton")
-#         self.speak_btn = CustomButton(controls, text="🔊 Speak", command=self.speak, style="Big.TButton")
-#         self.reset_btn = CustomButton(controls, text="♻ Reset Transcript", command=self.reset_transcript, style="Big.TButton")
-#         self.save_btn = CustomButton(controls, text="💾 Save Transcript", command=self.save_transcript, style="Big.TButton")
-#         self.back_btn = CustomButton(controls, text="⬅ Back", command=self.show_main_menu, style="Big.TButton")
-
-#         for btn in [self.start_btn, self.stop_btn, self.speak_btn,
-#                     self.reset_btn, self.save_btn, self.back_btn]:
-#             btn.pack(side=tk.LEFT, padx=5, pady=3, fill=tk.X, expand=True)
-
-#         status_frame = ttk.Frame(self.root)
-#         status_frame.pack(fill=tk.X, pady=8, padx=15)
-
-#         ttk.Label(status_frame, text="Prediction:", font=(FONT_FAMILY, 16, "bold"), foreground=ACCENT_COLOR).pack(side=tk.LEFT, padx=(0, 10))
-
-#         self.pred_var = tk.StringVar(value="—")
-#         self.pred_label = ttk.Label(status_frame, textvariable=self.pred_var,
-#                                     font=(FONT_FAMILY, 20, "bold"), foreground=ACCENT_COLOR)
-#         self.pred_label.pack(side=tk.LEFT)
-
-#         self.conf_var = tk.StringVar(value="")
-#         ttk.Label(status_frame, textvariable=self.conf_var, font=(FONT_FAMILY, 14),
-#                   foreground="#4b5563").pack(side=tk.LEFT, padx=10)
-
-#         transcript_frame = ttk.LabelFrame(self.root, text="Transcript", padding=15, style="TFrame")
-#         transcript_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
-
-#         self.transcript = tk.Text(transcript_frame, height=8,
-#                                   font=(FONT_FAMILY, 14),
-#                                   bg="white",
-#                                   fg=TEXT_COLOR,
-#                                   insertbackground=TEXT_COLOR,
-#                                   bd=2,
-#                                   relief="groove",
-#                                   padx=10, pady=10)
-#         self.transcript.pack(fill=tk.BOTH, expand=True)
-
-#         self.prepare_and_train()
-
-
-#     def prepare_and_train(self):
-#         if not os.path.exists(DATA_PATH):
-#             messagebox.showerror("Dataset Missing", f"{DATA_PATH} not found.")
-#             return
-#         df = pd.read_csv(DATA_PATH, header=None)
-#         if df.empty:
-#             messagebox.showerror("Dataset Empty", f"{DATA_PATH} is empty.")
-#             return
-#         X = df.iloc[:, :-1].values
-#         y = df.iloc[:, -1].values
-#         try:
-#             Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-#         except Exception:
-#             Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42)
-#         self.clf = RandomForestClassifier(n_estimators=300, random_state=42)
-#         self.clf.fit(Xtr, ytr)
-#         if len(np.unique(yte)) > 1 and len(yte) > 0:
-#             yhat = self.clf.predict(Xte)
-#             acc = accuracy_score(yte, yhat)
-#             self.conf_var.set(f"Model Accuracy: {acc:.2f}")
-#         self.labels_ = np.unique(y)
-#         joblib.dump(self.clf, MODEL_PATH)
-
-#     def start(self):
-#         if self.running:
-#             return
-#         if self.clf is None:
-#             messagebox.showerror("No Model", "Train the model first.")
-#             return
-#         self.cap = cv2.VideoCapture(0)
-#         if not self.cap.isOpened():
-#             messagebox.showerror("Camera Error", "Could not open webcam.")
-#             return
-#         self.running = True
-#         self.update_translate()
-
-#     def stop(self):
-#         self.running = False
-#         if self.cap:
-#             self.cap.release()
-#         self.video_label.config(image='')
-#         self.window.clear()
-
-#     def reset_transcript(self):
-#         self.transcript.delete("1.0", tk.END)
-#         self.last_prediction = None
-
-#     def update_translate(self):
-#         if not self.running:
-#             return
-#         ok, frame = self.cap.read()
-#         if not ok:
-#             self.stop()
-#             return
-#         frame = cv2.flip(frame, 1)
-#         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-#         res = self.hands.process(rgb)
-#         pred = None
-#         pred_conf = 0.0
-#         if res.multi_hand_landmarks:
-#             hand = res.multi_hand_landmarks[0]
-#             mp_drawing.draw_landmarks(frame, hand, mp_hands.HAND_CONNECTIONS)
-#             feat = normalize_landmarks(hand.landmark)
-#             if hasattr(self.clf, "predict_proba"):
-#                 proba = self.clf.predict_proba([feat])[0]
-#                 pred_idx = int(np.argmax(proba))
-#                 pred = self.clf.classes_[pred_idx]
-#                 pred_conf = float(proba[pred_idx])
-#             else:
-#                 pred = self.clf.predict([feat])[0]
-#                 pred_conf = 1.0
-#             self.window.append(pred)
-#             if len(self.window) == self.window.maxlen:
-#                 common, count = Counter(self.window).most_common(1)[0]
-#                 pred = common
-#                 pred_conf = count / len(self.window)
-#         if pred is not None:
-#             self.pred_var.set(str(pred))
-#             if pred_conf >= 0.7 and pred != self.last_prediction:
-#                 self.transcript.insert(tk.END, pred + ' ')
-#                 self.transcript.see(tk.END)
-#                 self.last_prediction = pred
-#         else:
-#             self.pred_var.set("—")
-#             self.last_prediction = None
-#         img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-#         imgtk = ImageTk.PhotoImage(image=img)
-#         self.video_label.imgtk = imgtk
-#         self.video_label.configure(image=imgtk)
-#         self.root.after(15, self.update_translate)
-
-#     def save_transcript(self):
-#         txt = self.transcript.get("1.0", tk.END).strip()
-#         if not txt:
-#             return
-#         path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text Files", "*.txt")])
-#         if path:
-#             with open(path, "w", encoding="utf-8") as f:
-#                 f.write(txt)
-#             messagebox.showinfo("Saved", f"Transcript saved to:\n{path}")
-
-#     def speak(self):
-#         txt = self.transcript.get("1.0", tk.END).strip()
-#         if not txt:
-#             return
-#         self.engine.say(txt)
-#         self.engine.runAndWait()
-
-#     def on_closing(self):
-#         if messagebox.askokcancel("Exit", "Are you sure you want to exit?"):
-#             self.stop()
-#             self.root.destroy()
-
-#     # ---------------- Learning Mode ----------------
-#     def init_learning_ui(self):
-#         self.clear_root()
-
-#         ttk.Label(self.root, text="📚 Learning Mode",
-#                   font=(FONT_FAMILY, 20, "bold"), foreground=ACCENT_COLOR).pack(pady=15)
-
-#         video_files = [f for f in os.listdir(VIDEO_FOLDER) if f.endswith(".mp4")]
-#         if not video_files:
-#             ttk.Label(self.root, text="No videos found in 'video' folder.",
-#                       font=(FONT_FAMILY, 14), background=BG_COLOR).pack(pady=20)
-#             btn_back = CustomButton(self.root, text="⬅ Back", command=self.show_main_menu, style="Big.TButton")
-#             btn_back.pack(pady=10, ipadx=30, ipady=12)
-#             return
-
-#         self.video_var = tk.StringVar(value=video_files[0])
-#         combo = ttk.Combobox(self.root, textvariable=self.video_var,
-#                              values=video_files, state="readonly", font=(FONT_FAMILY, 12))
-#         combo.pack(pady=15, padx=15)
-
-#         self.video_label = tk.Label(self.root, bg="black", bd=4, relief="sunken")
-#         self.video_label.pack(padx=15, pady=15, fill=tk.BOTH, expand=True)
-
-#         controls = ttk.Frame(self.root)
-#         controls.pack(pady=10, padx=15)
-
-#         btn_play = CustomButton(controls, text="▶ Play", command=self.play_video, style="Big.TButton")
-#         btn_stop = CustomButton(controls, text="⏹ Stop", command=self.stop_video, style="Big.TButton")
-#         btn_back2 = CustomButton(controls, text="⬅ Back", command=self.back_from_learning, style="Big.TButton")
-
-#         for btn in [btn_play, btn_stop, btn_back2]:
-#             btn.pack(side=tk.LEFT, padx=5, pady=3, fill=tk.X, expand=True)
-
-#     def play_video(self):
-#         video_path = os.path.join(VIDEO_FOLDER, self.video_var.get())
-#         if self.video_cap:
-#             self.video_cap.release()
-#         self.video_cap = cv2.VideoCapture(video_path)
-#         self.update_video()
-
-#     def stop_video(self):
-#         if self.video_cap:
-#             self.video_cap.release()
-#             self.video_cap = None
-#         self.video_label.config(image='')
-
-#     def update_video(self):
-#         if not self.video_cap or not self.video_cap.isOpened():
-#             return
-#         ret, frame = self.video_cap.read()
-#         if not ret:
-#             self.stop_video()
-#             return
-#         frame = cv2.resize(frame, (800, 600))
-#         img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-#         imgtk = ImageTk.PhotoImage(image=img)
-#         self.video_label.imgtk = imgtk
-#         self.video_label.configure(image=imgtk)
-#         self.root.after(30, self.update_video)
-
-#     def back_from_learning(self):
-#         self.stop_video()
-#         self.show_main_menu()
-
-
-# if __name__ == "__main__":
-#     root = tk.Tk()
-#     app = SignTranslatorApp(root)
-#     root.protocol("WM_DELETE_WINDOW", app.on_closing)
-#     root.mainloop()
-
-
-
 import os
 import cv2
 import numpy as np
 import pandas as pd
 import mediapipe as mp
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
 import joblib
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
-from PIL import Image, ImageTk
-import pyttsx3
+import customtkinter as ctk
+from PIL import Image
+import threading
+import pygame
+from gtts import gTTS
+from deep_translator import GoogleTranslator
 from collections import deque, Counter
+import warnings
 
+warnings.filterwarnings("ignore")
 
-# Paths
+# --- CONFIGURATION ---
 DATA_PATH = "sign_data.csv"
 MODEL_PATH = "sign_model.pkl"
 VIDEO_FOLDER = "video"
-
-
-# Ensure video folder exists
-if not os.path.exists(VIDEO_FOLDER):
-    os.makedirs(VIDEO_FOLDER)
-
+if not os.path.exists(VIDEO_FOLDER): os.makedirs(VIDEO_FOLDER)
 
 # Mediapipe
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 
+# --- UI CONSTANTS ---
+ctk.set_appearance_mode("Dark")
+ctk.set_default_color_theme("blue")
 
-# UI Colors
-BG_COLOR = "#ffffff"
-BTN_COLOR = "#3b82f6"
-TEXT_COLOR = "#000000"
-ACCENT_COLOR = "#16a34a"
-
+FONT_HEADER = ("Poppins", 24, "bold")
+FONT_SUBHEADER = ("Poppins", 16, "bold")
+FONT_BODY = ("Poppins", 12)
+FONT_BUTTON = ("Poppins", 13, "bold")
 
 def normalize_landmarks(landmarks):
     pts = np.array([(lm.x, lm.y) for lm in landmarks], dtype=np.float32)
-    origin = pts[0]
-    pts -= origin
+    pts -= pts[0]
     scale = np.max(np.linalg.norm(pts, axis=1)) + 1e-6
     pts /= scale
     return pts.flatten()
 
+class PolishedTranslatorApp(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.title("Neuro Talk")
+        self.geometry("1250x850")
+        
+        pygame.mixer.init()
 
-class SignTranslatorApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("🖐 Sign Language Translator")
-
-        # Set window icon with logo.png (supports transparent PNG)
-        logo_img = Image.open("logo.png")
-        logo_icon = ImageTk.PhotoImage(logo_img)
-        self.root.iconphoto(True, logo_icon)
-        self.logo_icon = logo_icon  # Prevent garbage collection
-
-        self.root.geometry("1050x800")
-        self.root.configure(bg=BG_COLOR)
-
-        # Common variables
         self.cap = None
         self.running = False
         self.hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1,
                                     min_detection_confidence=0.5, min_tracking_confidence=0.5)
-        self.engine = pyttsx3.init()
-        self.engine.setProperty("rate", 170)
         self.clf = None
-        self.labels_ = None
         self.window = deque(maxlen=12)
         self.last_prediction = None
         self.video_cap = None
+        
+        self.init_ui()
+        threading.Thread(target=self.prepare_model, daemon=True).start()
 
-        self.show_main_menu()
+    def init_ui(self):
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
-    # ---------------- Main Menu ----------------
-    def show_main_menu(self):
-        self.clear_root()
+        self.sidebar = ctk.CTkFrame(self, width=250, corner_radius=0)
+        self.sidebar.grid(row=0, column=0, sticky="nsew")
+        self.sidebar.grid_rowconfigure(4, weight=1)
 
-        frame = ttk.Frame(self.root)
-        frame.pack(expand=True)
+        self.logo_label = ctk.CTkLabel(self.sidebar, text="Neuro Talk", font=FONT_HEADER)
+        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
 
-        # Display Logo above the title
-        logo_img = Image.open("logo.png")
-        logo_img = logo_img.resize((120, 120))  # Adjust size as needed
-        self.logo_photo = ImageTk.PhotoImage(logo_img)
-        logo_label = tk.Label(frame, image=self.logo_photo, bg=BG_COLOR)
-        logo_label.pack(pady=(18, 12))
+        self.btn_translate = ctk.CTkButton(self.sidebar, text="Translate Mode", command=self.show_translate_view, font=FONT_BUTTON, corner_radius=8, height=40)
+        self.btn_translate.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
 
-        ttk.Label(frame, text="🖐 Sign Language Translator", font=("Segoe UI", 20, "bold")).pack(pady=20)
+        self.btn_learn = ctk.CTkButton(self.sidebar, text="Learning Mode", command=self.show_learning_view, font=FONT_BUTTON, corner_radius=8, height=40, fg_color="transparent", border_width=2, text_color=("gray10", "gray90"))
+        self.btn_learn.grid(row=2, column=0, padx=20, pady=10, sticky="ew")
 
-        ttk.Button(frame, text="Translate Mode", command=self.init_translate_ui,
-                   style="TButton").pack(pady=10, ipadx=20, ipady=10)
-        ttk.Button(frame, text="Learning Mode", command=self.init_learning_ui,
-                   style="TButton").pack(pady=10, ipadx=20, ipady=10)
-        ttk.Button(frame, text="Exit", command=self.root.quit,
-                   style="TButton").pack(pady=10, ipadx=20, ipady=10)
+        self.appearance_mode_label = ctk.CTkLabel(self.sidebar, text="Appearance Mode:", anchor="w", font=FONT_BODY)
+        self.appearance_mode_label.grid(row=5, column=0, padx=20, pady=(10, 0))
+        self.appearance_mode_optionemenu = ctk.CTkOptionMenu(self.sidebar, values=["Dark", "Light"], command=self.change_appearance_mode_event, font=FONT_BODY)
+        self.appearance_mode_optionemenu.grid(row=6, column=0, padx=20, pady=(10, 20))
 
-    def clear_root(self):
-        for widget in self.root.winfo_children():
-            widget.destroy()
+        self.main_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
+        self.main_frame.grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
+        
+        self.translate_view = self.create_translate_view()
+        self.learning_view = self.create_learning_view()
+        self.show_translate_view()
 
-    # ---------------- Translate Mode ----------------
-    def init_translate_ui(self):
-        self.clear_root()
+    def create_translate_view(self):
+        frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        frame.grid_columnconfigure(0, weight=3)
+        frame.grid_columnconfigure(1, weight=1)
+        frame.grid_rowconfigure(0, weight=1)
 
-        self.video_label = tk.Label(self.root, bg="black")
-        self.video_label.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        # --- VIDEO CARD (Fill Mode) ---
+        # corner_radius=20 gives the rounded look.
+        # clips_children=True isn't supported in CTk natively yet, 
+        # so we rely on the image filling the frame cleanly.
+        self.vid_card = ctk.CTkFrame(frame, corner_radius=20, fg_color="black") 
+        self.vid_card.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
+        
+        # REMOVED PADDING HERE: padx=0, pady=0 allows the image to touch the edges
+        self.video_label = ctk.CTkLabel(self.vid_card, text="", corner_radius=20)
+        self.video_label.pack(fill="both", expand=True, padx=0, pady=0)
 
-        controls = ttk.Frame(self.root)
-        controls.pack(fill=tk.X, pady=10)
+        # --- CONTROLS ---
+        self.ctrl_panel = ctk.CTkFrame(frame, corner_radius=15)
+        self.ctrl_panel.grid(row=0, column=1, sticky="nsew")
+        
+        ctk.CTkLabel(self.ctrl_panel, text="Detected Sign", font=FONT_SUBHEADER, text_color="gray").pack(pady=(20, 5), padx=20, anchor="w")
+        self.pred_label = ctk.CTkLabel(self.ctrl_panel, text="...", font=("Poppins", 40, "bold"), text_color="#3B8ED0")
+        self.pred_label.pack(pady=5)
+        self.status_label = ctk.CTkLabel(self.ctrl_panel, text="Loading Model...", font=("Poppins", 10))
+        self.status_label.pack(pady=(0, 20))
 
-        self.start_btn = ttk.Button(controls, text="▶ Start", command=self.start)
-        self.stop_btn = ttk.Button(controls, text="⏹ Stop", command=self.stop)
-        self.speak_btn = ttk.Button(controls, text="🔊 Speak", command=self.speak)
-        self.reset_btn = ttk.Button(controls, text="♻ Reset Transcript", command=self.reset_transcript)
-        self.save_btn = ttk.Button(controls, text="💾 Save Transcript", command=self.save_transcript)
-        self.back_btn = ttk.Button(controls, text="⬅ Back", command=self.show_main_menu)
+        ctk.CTkLabel(self.ctrl_panel, text="Transcript", font=FONT_SUBHEADER, text_color="gray").pack(pady=(10, 5), padx=20, anchor="w")
+        self.transcript = ctk.CTkTextbox(self.ctrl_panel, font=FONT_BODY, corner_radius=10, height=150)
+        self.transcript.pack(fill="x", padx=20, pady=5)
 
-        for btn in [self.start_btn, self.stop_btn, self.speak_btn,
-                    self.reset_btn, self.save_btn, self.back_btn]:
-            btn.pack(side=tk.LEFT, padx=3, pady=3, fill=tk.X, expand=True)
+        self.btn_cam = ctk.CTkButton(self.ctrl_panel, text="Start Camera", command=self.toggle_camera, font=FONT_BUTTON, height=45, corner_radius=10)
+        self.btn_cam.pack(fill="x", padx=20, pady=(20, 10))
 
-        status_frame = ttk.Frame(self.root)
-        status_frame.pack(fill=tk.X, pady=5)
-        ttk.Label(status_frame, text="Prediction:", font=("Segoe UI", 14, "bold")).pack(side=tk.LEFT, padx=5)
-        self.pred_var = tk.StringVar(value="—")
-        self.pred_label = ttk.Label(status_frame, textvariable=self.pred_var,
-                                    font=("Segoe UI", 18, "bold"), foreground=ACCENT_COLOR)
-        self.pred_label.pack(side=tk.LEFT, padx=10)
-        self.conf_var = tk.StringVar(value="")
-        ttk.Label(status_frame, textvariable=self.conf_var, font=("Segoe UI", 12),
-                  foreground="#4b5563").pack(side=tk.LEFT)
+        speak_frame = ctk.CTkFrame(self.ctrl_panel, fg_color="transparent")
+        speak_frame.pack(fill="x", padx=20, pady=5)
+        ctk.CTkButton(speak_frame, text="🔊 Eng", command=lambda: self.speak("en"), width=60, font=FONT_BUTTON).pack(side="left", fill="x", expand=True, padx=(0, 5))
+        ctk.CTkButton(speak_frame, text="🔊 Hindi", command=lambda: self.speak("hi"), width=60, font=FONT_BUTTON, fg_color="#E07A5F", hover_color="#C0583E").pack(side="left", fill="x", expand=True, padx=(5, 0))
 
-        transcript_frame = ttk.LabelFrame(self.root, text="Transcript")
-        transcript_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        self.transcript = tk.Text(transcript_frame, height=8, font=("Segoe UI", 12),
-                                 bg="#f3f4f6", fg=TEXT_COLOR, insertbackground="black")
-        self.transcript.pack(fill=tk.BOTH, expand=True)
+        ctk.CTkButton(self.ctrl_panel, text="Clear Text", command=self.reset_transcript, font=FONT_BUTTON, fg_color="transparent", border_width=1).pack(fill="x", padx=20, pady=10)
 
-        self.prepare_and_train()
+        return frame
 
-    def prepare_and_train(self):
-        if not os.path.exists(DATA_PATH):
-            messagebox.showerror("Dataset Missing", f"{DATA_PATH} not found.")
-            return
-        df = pd.read_csv(DATA_PATH, header=None)
-        if df.empty:
-            messagebox.showerror("Dataset Empty", f"{DATA_PATH} is empty.")
-            return
-        X = df.iloc[:, :-1].values
-        y = df.iloc[:, -1].values
-        try:
-            Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-        except Exception:
-            Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42)
-        self.clf = RandomForestClassifier(n_estimators=300, random_state=42)
-        self.clf.fit(Xtr, ytr)
-        if len(np.unique(yte)) > 1 and len(yte) > 0:
-            yhat = self.clf.predict(Xte)
-            acc = accuracy_score(yte, yhat)
-            self.conf_var.set(f"Model Accuracy: {acc:.2f}")
-        self.labels_ = np.unique(y)
-        joblib.dump(self.clf, MODEL_PATH)
+    def create_learning_view(self):
+        frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        frame.grid_columnconfigure(0, weight=1)
+        frame.grid_columnconfigure(1, weight=3)
+        frame.grid_rowconfigure(0, weight=1)
 
-    def start(self):
+        list_card = ctk.CTkFrame(frame, corner_radius=15)
+        list_card.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
+        ctk.CTkLabel(list_card, text="Video Library", font=FONT_SUBHEADER).pack(pady=20, padx=20, anchor="w")
+        self.scroll_list = ctk.CTkScrollableFrame(list_card, label_text="Lessons")
+        self.scroll_list.pack(fill="both", expand=True, padx=10, pady=10)
+        self.refresh_video_list()
+
+        self.player_card = ctk.CTkFrame(frame, corner_radius=15, fg_color="black")
+        self.player_card.grid(row=0, column=1, sticky="nsew")
+        
+        # PADDING REMOVED HERE TOO
+        self.learn_video_label = ctk.CTkLabel(self.player_card, text="Select a video to play", corner_radius=15)
+        self.learn_video_label.pack(fill="both", expand=True, padx=0, pady=0)
+        
+        ctrls = ctk.CTkFrame(frame, fg_color="transparent")
+        ctrls.grid(row=1, column=1, pady=10) # Moved controls below video to keep video pure
+        ctk.CTkButton(ctrls, text="▶ Play", command=self.play_video, width=100).pack(side="left", padx=10)
+        ctk.CTkButton(ctrls, text="⏹ Stop", command=self.stop_video, width=100, fg_color="#C0392B", hover_color="#E74C3C").pack(side="left", padx=10)
+
+        return frame
+
+    def show_translate_view(self):
+        self.stop_video()
+        self.learning_view.pack_forget()
+        self.translate_view.pack(fill="both", expand=True)
+        self.btn_translate.configure(fg_color=["#3B8ED0", "#1F6AA5"])
+        self.btn_learn.configure(fg_color="transparent")
+
+    def show_learning_view(self):
+        self.stop_camera_logic()
+        self.translate_view.pack_forget()
+        self.learning_view.pack(fill="both", expand=True)
+        self.btn_translate.configure(fg_color="transparent")
+        self.btn_learn.configure(fg_color=["#3B8ED0", "#1F6AA5"])
+        self.refresh_video_list()
+
+    def change_appearance_mode_event(self, new_appearance_mode: str):
+        ctk.set_appearance_mode(new_appearance_mode)
+
+    def prepare_model(self):
+        if os.path.exists(MODEL_PATH):
+            try:
+                self.clf = joblib.load(MODEL_PATH)
+                if hasattr(self.clf, "classes_"): self.labels_ = self.clf.classes_
+                self.after(0, lambda: self.status_label.configure(text="AI Ready", text_color="#2CC985"))
+                return
+            except: pass
+        self.after(0, lambda: self.status_label.configure(text="Training AI...", text_color="orange"))
+        if os.path.exists(DATA_PATH):
+            try:
+                df = pd.read_csv(DATA_PATH, header=None)
+                X, y = df.iloc[:, :-1].values, df.iloc[:, -1].values
+                self.clf = RandomForestClassifier(n_estimators=100, random_state=42)
+                self.clf.fit(X, y)
+                self.labels_ = np.unique(y)
+                joblib.dump(self.clf, MODEL_PATH)
+                self.after(0, lambda: self.status_label.configure(text="AI Ready", text_color="#2CC985"))
+            except: self.after(0, lambda: self.status_label.configure(text="Training Failed", text_color="red"))
+
+    def toggle_camera(self):
         if self.running:
-            return
-        if self.clf is None:
-            messagebox.showerror("No Model", "Train the model first.")
-            return
-        self.cap = cv2.VideoCapture(0)
-        if not self.cap.isOpened():
-            messagebox.showerror("Camera Error", "Could not open webcam.")
-            return
-        self.running = True
-        self.update_translate()
+            self.stop_camera_logic()
+            self.btn_cam.configure(text="Start Camera", fg_color=["#3B8ED0", "#1F6AA5"])
+        else:
+            if self.clf is None: return
+            self.cap = cv2.VideoCapture(0)
+            self.running = True
+            self.btn_cam.configure(text="Stop Camera", fg_color="#C0392B", hover_color="#E74C3C")
+            self.update_translate()
 
-    def stop(self):
+    def stop_camera_logic(self):
         self.running = False
-        if self.cap:
-            self.cap.release()
-        self.video_label.config(image='')
+        if self.cap: self.cap.release(); self.cap = None
+        self.video_label.configure(image=None)
         self.window.clear()
 
-    def reset_transcript(self):
-        self.transcript.delete("1.0", tk.END)
-        self.last_prediction = None
-
     def update_translate(self):
-        if not self.running:
-            return
+        if not self.running: return
         ok, frame = self.cap.read()
-        if not ok:
-            self.stop()
-            return
+        if not ok: self.toggle_camera(); return
+
         frame = cv2.flip(frame, 1)
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         res = self.hands.process(rgb)
-        pred = None
-        pred_conf = 0.0
+        
+        pred_text = "..."
         if res.multi_hand_landmarks:
-            hand = res.multi_hand_landmarks[0]
-            mp_drawing.draw_landmarks(frame, hand, mp_hands.HAND_CONNECTIONS)
-            feat = normalize_landmarks(hand.landmark)
-            if hasattr(self.clf, "predict_proba"):
-                proba = self.clf.predict_proba([feat])[0]
-                pred_idx = int(np.argmax(proba))
-                pred = self.clf.classes_[pred_idx]
-                pred_conf = float(proba[pred_idx])
-            else:
-                pred = self.clf.predict([feat])[0]
-                pred_conf = 1.0
-            self.window.append(pred)
+            for hand in res.multi_hand_landmarks:
+                mp_drawing.draw_landmarks(frame, hand, mp_hands.HAND_CONNECTIONS)
+                try:
+                    feat = normalize_landmarks(hand.landmark)
+                    proba = self.clf.predict_proba([feat])[0]
+                    idx = int(np.argmax(proba))
+                    if proba[idx] > 0.6: self.window.append(self.clf.classes_[idx])
+                except: pass
+
             if len(self.window) == self.window.maxlen:
                 common, count = Counter(self.window).most_common(1)[0]
-                pred = common
-                pred_conf = count / len(self.window)
-        if pred is not None:
-            self.pred_var.set(str(pred))
-            if pred_conf >= 0.7 and pred != self.last_prediction:
-                self.transcript.insert(tk.END, pred + ' ')
-                self.transcript.see(tk.END)
-                self.last_prediction = pred
-        else:
-            self.pred_var.set("—")
-            self.last_prediction = None
+                if count > 8: pred_text = common
+
+        if pred_text != "..." and pred_text != self.last_prediction:
+            self.pred_label.configure(text=pred_text)
+            self.transcript.insert("end", pred_text + " ")
+            self.transcript.see("end")
+            self.last_prediction = pred_text
+        elif pred_text == "...":
+            self.pred_label.configure(text="...")
+
         img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        imgtk = ImageTk.PhotoImage(image=img)
-        self.video_label.imgtk = imgtk
-        self.video_label.configure(image=imgtk)
-        self.root.after(15, self.update_translate)
+        # --- FIXED SIZE FOR "FILL MODE" ---
+        # 800x600 is arbitrary but large enough to look like it fills the space
+        ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(800, 600))
+        self.video_label.configure(image=ctk_img)
+        self.video_label.image = ctk_img 
+        
+        self.after(15, self.update_translate)
 
-    def save_transcript(self):
-        txt = self.transcript.get("1.0", tk.END).strip()
-        if not txt:
+    def reset_transcript(self):
+        self.transcript.delete("0.0", "end")
+        self.last_prediction = None
+
+    def speak(self, lang):
+        txt = self.transcript.get("0.0", "end").strip()
+        if not txt: return
+        threading.Thread(target=self._threaded_speak, args=(txt, lang), daemon=True).start()
+
+    def _threaded_speak(self, text, lang):
+        try:
+            target_txt, l, tld = text, 'en', 'co.in'
+            if lang == 'hi':
+                target_txt = GoogleTranslator(source='auto', target='hi').translate(text)
+                l, tld = 'hi', 'com'
+            tts = gTTS(text=target_txt, lang=l, tld=tld)
+            tts.save("voice.mp3")
+            pygame.mixer.music.load("voice.mp3")
+            pygame.mixer.music.play()
+            while pygame.mixer.music.get_busy(): pygame.time.Clock().tick(10)
+            pygame.mixer.music.unload()
+            os.remove("voice.mp3")
+        except: pass
+
+    def refresh_video_list(self):
+        for widget in self.scroll_list.winfo_children(): widget.destroy()
+        files = [f for f in os.listdir(VIDEO_FOLDER) if f.endswith(".mp4")]
+        if not files:
+            ctk.CTkLabel(self.scroll_list, text="No videos found").pack(pady=10)
             return
-        path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text Files", "*.txt")])
-        if path:
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(txt)
-            messagebox.showinfo("Saved", f"Transcript saved to:\n{path}")
+        for f in files:
+            ctk.CTkButton(self.scroll_list, text=f, command=lambda fname=f: self.select_video(fname),
+                          fg_color="transparent", border_width=1, text_color=("black", "white"), anchor="w").pack(fill="x", pady=2)
 
-    def speak(self):
-        txt = self.transcript.get("1.0", tk.END).strip()
-        if not txt:
-            return
-        self.engine.say(txt)
-        self.engine.runAndWait()
-
-    def on_closing(self):
-        if messagebox.askokcancel("Exit", "Are you sure you want to exit?"):
-            self.stop()
-            self.root.destroy()
-
-    # ---------------- Learning Mode ----------------
-    def init_learning_ui(self):
-        self.clear_root()
-
-        ttk.Label(self.root, text="📚 Learning Mode", font=("Segoe UI", 18, "bold")).pack(pady=10)
-
-        video_files = [f for f in os.listdir(VIDEO_FOLDER) if f.endswith(".mp4")]
-        if not video_files:
-            ttk.Label(self.root, text="No videos found in 'video' folder.", font=("Segoe UI", 12)).pack(pady=20)
-            ttk.Button(self.root, text="⬅ Back", command=self.show_main_menu).pack(pady=10)
-            return
-
-        self.video_var = tk.StringVar(value=video_files[0])
-        ttk.Combobox(self.root, textvariable=self.video_var, values=video_files, state="readonly").pack(pady=10)
-
-        self.video_label = tk.Label(self.root, bg="black")
-        self.video_label.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
-
-        controls = ttk.Frame(self.root)
-        controls.pack(pady=10)
-
-        ttk.Button(controls, text="▶ Play", command=self.play_video).pack(side=tk.LEFT, padx=5)
-        ttk.Button(controls, text="⏹ Stop", command=self.stop_video).pack(side=tk.LEFT, padx=5)
-        ttk.Button(controls, text="⬅ Back", command=self.back_from_learning).pack(side=tk.LEFT, padx=5)
+    def select_video(self, fname):
+        self.current_video_file = fname
+        self.stop_video()
+        self.play_video()
 
     def play_video(self):
-        video_path = os.path.join(VIDEO_FOLDER, self.video_var.get())
-        if self.video_cap:
-            self.video_cap.release()
-        self.video_cap = cv2.VideoCapture(video_path)
-        self.update_video()
+        if not hasattr(self, 'current_video_file'): return
+        path = os.path.join(VIDEO_FOLDER, self.current_video_file)
+        self.video_cap = cv2.VideoCapture(path)
+        self.update_video_frame()
 
     def stop_video(self):
-        if self.video_cap:
-            self.video_cap.release()
-            self.video_cap = None
-        self.video_label.config(image='')
-
-    def update_video(self):
-        if not self.video_cap or not self.video_cap.isOpened():
-            return
+        if self.video_cap: self.video_cap.release(); self.video_cap = None
+    
+    def update_video_frame(self):
+        if not self.video_cap or not self.video_cap.isOpened(): return
         ret, frame = self.video_cap.read()
-        if not ret:
-            self.stop_video()
-            return
-        frame = cv2.resize(frame, (800, 600))
+        if not ret: self.stop_video(); return
         img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        imgtk = ImageTk.PhotoImage(image=img)
-        self.video_label.imgtk = imgtk
-        self.video_label.configure(image=imgtk)
-        self.root.after(30, self.update_video)
-
-    def back_from_learning(self):
-        self.stop_video()
-        self.show_main_menu()
-
+        # FIXED SIZE HERE TOO
+        ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(800, 600))
+        self.learn_video_label.configure(image=ctk_img, text="")
+        self.learn_video_label.image = ctk_img
+        self.after(30, self.update_video_frame)
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = SignTranslatorApp(root)
-    root.protocol("WM_DELETE_WINDOW", app.on_closing)
-    root.mainloop()
+    app = PolishedTranslatorApp()
+    app.mainloop()
+
